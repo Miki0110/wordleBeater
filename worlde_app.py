@@ -39,10 +39,10 @@ class WordleGame(QWidget):
         self.current_attempt = 0
         # Feedback is saved as a list of strings, where each string is either "gray", "yellow" or "green"
         # EG: ["gray", "yellow", "green", "gray", "gray"]
-        self.previous_feedback = ['gray'] * 5
+        self.previous_feedback = []
 
         # Initialise the first guess, based on the best starting words
-        self.current_guess = make_guess([get_startword()])
+        self.current_guess = make_guess([get_startword()], self.previous_feedback)
 
         self.init_ui()
 
@@ -72,20 +72,22 @@ class WordleGame(QWidget):
     def make_guess(self):
         # Use the make_guess function from wordle_beater.py
         if self.words:
-            return make_guess(self.words)  # Use make_guess from wordle_beater
+            return make_guess(self.words, self.previous_feedback)  # Use make_guess from wordle_beater
         else:
             return "....."  # Return a placeholder if no words left
 
     def submit_feedback(self):
         # Get the feedback from the labels
         feedback = [self.determine_feedback(label) for label in self.letters]
-        self.previous_feedback = feedback  # Store the feedback
+        # Store this guess and its feedback
+        self.previous_feedback.append({'guess': self.current_guess, 'feedback': feedback})
+
         # Check if the word was found
         if feedback == ['green'] * 5:
             self.end_game("Word found!")
             return
         # Filter the words based on the feedback
-        self.words = filter_words(self.current_guess, feedback, self.words)
+        self.words = filter_words(self.words, self.previous_feedback[-1]['guess'], self.previous_feedback[-1]['feedback'])
         self.current_attempt += 1
         # Check if the game is over, because no words are left
         if not self.words:
@@ -93,6 +95,8 @@ class WordleGame(QWidget):
             return
         # Make a new guess
         self.current_guess = self.make_guess()
+        print(f'current guess {self.current_guess}')
+
         self.set_next_guess_and_feedback()
 
     def set_next_guess_and_feedback(self):
@@ -100,7 +104,7 @@ class WordleGame(QWidget):
         for i, letter in enumerate(self.letters):
             letter.setText(self.current_guess[i].upper())
             # If it was green before, it should stay green
-            if self.previous_feedback[i] == "green":
+            if self.previous_feedback[0]['feedback'][i] == "green":
                 letter.setStyleSheet("background-color: green; border: 1px solid black; width: 40px; height: 40px; font-size: 20px;")
             else:
                 letter.setStyleSheet("background-color: gray; border: 1px solid black; width: 40px; height: 40px; font-size: 20px;")
