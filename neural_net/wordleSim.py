@@ -3,119 +3,113 @@ import numpy as np
 
 
 class WordleEnvironment:
-    def __init__(self, word_list):
-        self.word_list = word_list
+    def __init__(self, word_list, alphabet='abcdefghijklmnopqrstuvwxyzæøåé'):
+        assert all(len(word) == 5 for word in word_list), "All words must be 5 letters long"
+        self.alphabet = alphabet
+        self.words = word_list
         self.target_word = None
-        self.current_guess = None
-        self.attempts = 0
-        self.max_attempts = 6
-        self.done = False
-        self.feedback_history = []
+        self.current_state = None
+        self.max_guesses = 6
+        self.reset()
 
     def reset(self):
-        self.target_word = random.choice(self.word_list)
-        self.attempts = 0
-        self.done = False
-        self.current_guess = None
-        self.feedback_history = []
-        # Reset state and return initial state
-        return self.get_state()
-
-    def step(self, guess):
-        self.current_guess = guess
-        self.attempts += 1
-
-        feedback = self.get_feedback()
-        self.feedback_history.append(self.encode_feedback(feedback))
-
-        # Check if the guess is correct
-        if guess == self.target_word:
-            self.done = True
-            reward = 100  # Reward for correct guess
-        elif self.attempts >= self.max_attempts:
-            self.done = True
-            reward = -10  # Penalty for not guessing in time
-        else:
-            reward = self.calculate_reward(guess)  # Calculate intermediate reward
-
-        return self.get_state(), reward, self.done
-
-    def calculate_reward(self, guess):
-        # A simple reward function that gives 1 point for each correct letter
-        return sum(1 for g, t in zip(guess, self.target_word) if g == t)
-
-    def get_feedback(self):
-        # This function returns the feedback similar to Wordle's green, yellow, and gray
-        feedback = []
-        for i, letter in enumerate(self.current_guess):
-            if letter == self.target_word[i]:
-                feedback.append('green')
-            elif letter in self.target_word:
-                feedback.append('yellow')
-            else:
-                feedback.append('gray')
-        return feedback
-
-    def get_state(self):
-        if self.current_guess:
-            # Convert letters to indices
-            letter_indices = [self.letter_to_index(letter) for letter in self.current_guess]
-            feedback = self.get_feedback()
-            feedback_data = self.encode_feedback(feedback)
-        else:
-            # If there's no current guess, use -1 as a placeholder for the letter index
-            letter_indices = np.zeros(5)
-            feedback_data = np.zeros((3 * 5))  # Assuming 3 possible feedback states for each character
-
-        state = {
-            'letter_indices': np.array(letter_indices),
-            'feedback_data': feedback_data
+        self.target_word = random.choice(self.words)
+        # Initialize a numeric state representation
+        self.current_state = {
+            'guesses': np.zeros((self.max_guesses, 5, len(self.alphabet))),
+            'feedback': np.zeros((self.max_guesses, 2))
         }
-        return state
+        self.current_guess_index = 0
+        return self._get_current_state()
 
-    def letter_to_index(self, letter):
-        # Mapping from letter to index, accounting for the additional Danish characters
-        letter_mapping = {
-            'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4,
-            'f': 5, 'g': 6, 'h': 7, 'i': 8, 'j': 9,
-            'k': 10, 'l': 11, 'm': 12, 'n': 13, 'o': 14,
-            'p': 15, 'q': 16, 'r': 17, 's': 18, 't': 19,
-            'u': 20, 'v': 21, 'w': 22, 'x': 23, 'y': 24,
-            'z': 25, 'æ': 26, 'ø': 27, 'å': 28
+    def step(self, action):
+        word = self.words[action]
+        # action is a one-hot encoded 5-letter word guess
+        feedback = self.get_feedback(word)
+        self.current_state['guesses'][self.current_guess_index] = word
+        self.current_state['feedback'][self.current_guess_index] = feedback
+        self.current_guess_index += 1
+        reward = self.get_reward(feedback, word)
+        done = self.is_done(feedback)
+        return self._get_current_state(), reward, done
+
+    def _get_current_state(self):
+        # Flatten the guesses and feedback arrays and concatenate them
+        flat_guesses = self.current_state['guesses'].reshape(-1)
+        flat_feedback = self.current_state['feedback'].reshape(-1)
+        return np.concatenate([flat_guesses, flat_feedback])
+
+    def get_feedback(self, guess):
+        # Compare the guess to the target word and return feedback
+        feedback = {
+            'correct_position': sum([1 for g, t in zip(guess, self.target_word) if np.array_equal(g, t)]),
+            'correct_letter': sum([1 for g in guess if any(np.array_equal(g, t) for t in self.target_word)])
         }
-        return letter_mapping[letter]
+        feedback['correct_letter'] -= feedback['correct_position']  # Subtract correct positions to correct the count
+        feedback_array = np.array([feedback['correct_letter'], feedback['correct_position']])
+        return feedback_array
 
-    def encode_feedback(self, feedback):
-        # Simplified encoding with 3 slots per character
-        encoding = {'green': [1, 0, 0], 'yellow': [0, 1, 0], 'gray': [0, 0, 1]}
-        encoded_feedback = [encoding[color] for color in feedback]
-        return np.array(encoded_feedback).flatten()
+    def get_reward(self, feedback, action):
+        # Initial reward based on correct positions and correct letters
+        reward = feedback[1] * 0.2 + feedback[0] * 0.1
 
-    def is_done(self):
-        return self.done
+        # Bonus for repositioning yellow letters correctly
+        for prev_guess, prev_feedback in zip(self.current_state['guesses'], self.current_state['feedback']):
+            for i, (prev_letter, prev_feedback) in enumerate(zip(prev_guess, prev_feedback)):
+                if prev_feedback == 'yellow' and np.array_equal(prev_letter, self.target_word[i]):
+                    reward += 0.1  # Bonus for correctly repositioning a yellow letter
 
+        # Penalty for exceeding the guess limit or repeating the same incorrect guess
+        if self.current_guess_index >= self.max_guesses:
+            reward -= 10
+        elif any(np.array_equal(action, prev_guess) for prev_guess in self.current_state['guesses'][:-1]):  # Updated line
+            reward -= 0.1
+
+        return reward
+
+    def is_done(self, feedback):
+        # Check if the game is done (word is guessed correctly or max guesses reached)
+        return feedback[1] == 5 or self.current_guess_index >= self.max_guesses
+
+    # Conversion functions
+    def _letter_to_one_hot(self, letter):
+        one_hot = np.zeros(len(self.alphabet))
+        one_hot[self.alphabet.index(letter)] = 1
+        return one_hot
+
+    def _one_hot_to_letter(self, one_hot):
+        return self.alphabet[np.argmax(one_hot)]
+
+    def word_to_one_hot(self, word):
+        return np.array([self._letter_to_one_hot(letter) for letter in word])
+
+    def one_hot_to_word(self, one_hot_word):
+        return ''.join(self._one_hot_to_letter(one_hot_letter) for one_hot_letter in one_hot_word)
+
+def convert_word_list(words, alphabet='abcdefghijklmnopqrstuvwxyzæøåé'):
+    word_to_one_hot = lambda word: np.array([np.eye(len(alphabet))[alphabet.index(letter)] for letter in word])
+    return [word_to_one_hot(word) for word in words]
 
 if __name__ == '__main__':
     # Example usage
     with open('../wordle_list.txt', 'r', encoding='UTF-8', newline='\r\n') as f:
-        words = [line.strip() for line in f]
-    env = WordleEnvironment(words)
+        words = [line.strip().lower() for line in f]
+    env = WordleEnvironment(convert_word_list(words))
 
     # Reset the environment to start
     initial_state = env.reset()
-    print(f"Target Word: {env.target_word}")  # For testing purposes only
+    target_word = env.one_hot_to_word(env.target_word)
+    print(f"Target Word: {target_word}")  # For testing purposes only
 
     while True:
-        # Pick a random word
-        word = random.choice(words)
-        words.pop(words.index(word))
-        print(f"Guess: {word}")
-        # Example step (assuming the agent guessed the word "arise")
-        next_state, reward, done = env.step(word)
-        print(f"Feedback: {env.get_feedback()}")
-        print(f"Reward: {reward}")
-        print(f"Game Over: {done}")
-        state = env.get_state()
-        print(f"State: {state}")
+        # Start the environment
+        guess_numerical = random.randint(0, len(words) - 1)
+        guess_word = env.one_hot_to_word(words[guess_numerical])
+        next_state, reward, done = env.step(guess_numerical)
+
+        # Extract the feedback for the latest guess from the next_state
+        feedback = next_state[-2:]  # Assumes feedback is the last two elements of the state array
+        print(f"Guess: {guess_word}, Feedback: {feedback}, Reward: {reward}, Done: {done}")
+
         if done:
             break
