@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout
 from PyQt5.QtCore import Qt
-from wordle_beater import filter_words, make_guess, get_startword
+from classic_algorithm.wordle_beater import filter_words, make_guess, get_startword
 
 
 class FeedbackLabel(QLabel):
