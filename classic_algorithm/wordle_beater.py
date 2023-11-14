@@ -84,7 +84,7 @@ def adjust_scores_based_on_feedback(word_scores, letter_frequency, feedback_entr
     for word, score in word_scores.items():
         # Penalize words with double letters
         if has_double_letters(word):
-            word_scores[word] -= 1000
+            word_scores[word] -= 50
         for i, letter in enumerate(word):
             if feedback[i] == "green" and guess[i] == letter:
                 word_scores[word] += 10 * letter_frequency[letter]
