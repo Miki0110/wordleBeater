@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import random
 from wordleSim import WordleEnvironment, convert_word_list
 from model import DQN, choose_action, encode_guess, read_word_list, train_model
@@ -7,14 +8,60 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
+import multiprocessing
+from multiprocessing import Queue
 
-# Normalization function
-def normalize_state(state):
-    mean = np.mean(state, axis=0)
-    std = np.std(state, axis=0)
-    normalized_state = (state - mean) / (std + 1e-8)  # Adding a small constant to avoid division by zero
-    return state
 
+class SharedReplayBuffer:
+    def __init__(self, size):
+        self.buffer = Queue(maxsize=size)
+
+    def add(self, experience):
+        if self.buffer.full():
+            self.buffer.get()  # Remove oldest experience if the buffer is full
+        self.buffer.put(experience)
+
+    def sample(self, batch_size):
+        samples = []
+        for _ in range(batch_size):
+            if self.buffer.empty():
+                break
+            samples.append(self.buffer.get())
+        return samples
+
+    def __len__(self):
+        return self.buffer.qsize()
+
+
+def worker(worker_id, env, model, replay_buffer, update_freq, queue, epsilon):
+    step = 0
+    state = env.reset()
+    done = False
+
+    while not done:
+        # Select an action based on the current state and policy
+        if np.random.rand() < epsilon:
+            action = env.action_space.sample()  # Exploration
+        else:
+            action = model.predict(state)  # Exploitation using the current policy
+
+        # Perform the action in the environment
+        next_state, reward, done, _ = env.step(action)
+
+        # Create an experience tuple
+        experience = (state, action, reward, next_state, done)
+
+        # Add experience to the shared replay buffer
+        replay_buffer.add(experience)
+
+        # Update state
+        state = next_state if not done else env.reset()
+        step += 1
+
+        # Synchronize model periodically
+        if worker_id == 0 and step % update_freq == 0:
+            # Send local model state to the main process for synchronization
+            queue.put(model.state_dict())
 
 if __name__ == "__main__":
     # Experience replay buffer
@@ -23,7 +70,12 @@ if __name__ == "__main__":
     # Initialize metrics
     rolling_window_size = 100
     rolling_rewards = deque(maxlen=rolling_window_size)
-    average_losses = []
+    average_losses = deque(maxlen=rolling_window_size)
+    shared_buffer = SharedReplayBuffer(size=10000)
+
+    num_workers = 4  # Number of parallel workers
+    update_freq = 100  # Frequency of model updates
+
 
     # Hyperparameters
     epsilon = 1.0  # Starting exploration rate
@@ -53,14 +105,23 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.01)
     criterion = nn.MSELoss()
 
+    # Load the model if it exists
+    if os.path.exists('wordle_dqn_model.pth'):
+        # Ask the user if they want to load the model
+        answer = input("A saved model was found. Do you want to load it? (y/n): ")
+        if answer.lower() == 'y':
+            model.load_state_dict(torch.load('wordle_dqn_model.pth'))
+            print("Model loaded.")
+        else:
+            print("Model not loaded.")
+
     # Main training loop
     try:
         episode = 0
-        with tqdm(total=1, desc="Training Progress", unit="episodes", position=0, ncols=80, leave=True, ascii=True) as pbar:
-            with tqdm(total=1, desc="Episode Progress", unit="steps", position=1, ncols=80, leave=False, ascii=True) as infobar:
+        with tqdm(total=1, desc="Training Progress", unit=" episodes", position=0, ncols=80, leave=True, ascii=True) as pbar:
+            with tqdm(total=1, desc="Episode Progress", unit=" steps", position=1, ncols=80, leave=False, ascii=True) as infobar:
                 while True:
                     state = env.reset()  # Reset the Wordle environment
-                    state = normalize_state(state)  # Normalize the state
                     no_word_vector = np.zeros(word_state_length)
                     state = np.concatenate((no_word_vector, state))
 
@@ -74,10 +135,6 @@ if __name__ == "__main__":
                         action = choose_action(state, action_size, epsilon, model)
                         word_state = encode_guess(word_list[action])
                         feedback_state, reward, done = env.step(action)  # Perform the action in the environment
-
-                        # Normalize the states
-                        word_state = normalize_state(word_state)
-                        feedback_state = normalize_state(feedback_state)
 
                         next_state = np.concatenate((word_state, feedback_state))
                         replay_buffer.append((state, action, reward, next_state, done))  # Store experience
@@ -107,7 +164,7 @@ if __name__ == "__main__":
                         torch.save(model.state_dict(), 'wordle_dqn_model.pth')
 
                     # Update progress bars
-                    if episode % rolling_window_size == 0:
+                    if episode % rolling_window_size == 0 and episode > 200:
                         infobar.set_description(
                             f"Avg Reward (Last {rolling_window_size} episodes): {np.mean(rolling_rewards):.4f}, Avg Loss: {np.mean(average_losses):.4f}, Epsilon: {epsilon:.4f}")
                     pbar.update(1)
