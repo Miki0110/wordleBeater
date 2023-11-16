@@ -37,7 +37,7 @@ class WordleEnvironment:
         # Flatten the guesses and feedback arrays and concatenate them
         #flat_guesses = self.current_state['guesses'].reshape(-1)
         #flat_feedback = self.current_state['feedback'].reshape(-1)
-        return self.current_state['feedback'] #np.concatenate([flat_guesses, flat_feedback])
+        return self.current_state['feedback']
 
     def get_feedback(self, guess):
         """
@@ -78,6 +78,10 @@ class WordleEnvironment:
         if np.array_equiv(action, self.target_word):
             reward += 1
 
+        # Penalty for guessing the same word twice
+        if self.current_guess_index > 1:
+            if np.array_equiv(action, self.current_state['guesses'][self.current_guess_index-1]):
+                reward -= 1
         return reward
 
     def is_done(self, feedback):

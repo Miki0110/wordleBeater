@@ -11,14 +11,11 @@ if __name__ == "__main__":
     word_list = read_word_list()
     env = WordleEnvironment(convert_word_list(word_list))
 
-    # Calculate the state vector size
-    alphabet = 'abcdefghijklmnopqrstuvwxyzæøåé'
-    one_hot_length = len(alphabet)
-    word_state_length = one_hot_length * 5
-    feedback_state = 5
-    state_size = word_state_length + feedback_state
+    # load saved model
+    saved_model = torch.load('wordle_dqn_model.pth')
+    state_size = saved_model['input_size']
 
-    action_size = len(word_list)
+    action_size = saved_model['output_size']
 
     # Set up the model
     model = DQN(state_size, action_size)
@@ -26,17 +23,17 @@ if __name__ == "__main__":
     # Load the model if it exists
     if os.path.exists('wordle_dqn_model.pth'):
         # Ask the user if they want to load the model
-        model.load_state_dict(torch.load('wordle_dqn_model.pth'))
+        model.load_state_dict(saved_model["model_state"])
         print("Model loaded.")
     else:
         raise Exception("No model found.")
-
+    model.eval()
     # Game loop
     try:
         while True:
             state = env.reset()
-            no_word_vector = np.zeros(word_state_length)
-            state = np.concatenate((no_word_vector, state))
+            no_word_vector = np.zeros(5)
+            state = np.concatenate((no_word_vector, state, [1]))
 
             done = False
             # Print the target word
@@ -47,7 +44,7 @@ if __name__ == "__main__":
                 word_state = encode_guess(word_list[action])
                 feedback_state, reward, done = env.step(action)  # Perform the action in the environment
 
-                next_state = np.concatenate((word_state, feedback_state))
+                next_state = np.concatenate((word_state, feedback_state, [env.current_guess_index]))
                 state = next_state
 
                 # Print the guess and feedback

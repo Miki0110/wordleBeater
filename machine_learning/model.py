@@ -15,14 +15,15 @@ class DQN(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.fc1 = nn.Linear(state_size, 128).to(self.device)  # 128 neurons in the hidden layer
         self.relu = nn.ReLU().to(self.device)
+        self.sigmoid = nn.Sigmoid().to(self.device)
         self.fc2 = nn.Linear(128, 64).to(self.device)
         self.fc3 = nn.Linear(64, action_size).to(self.device)  # Output is the number of possible actions
 
     def forward(self, x):
-        x = self.fc1(x.to(self.device))
-        x = self.relu(x)
+        x = self.fc1(x)
+        x = self.sigmoid(x)
         x = self.fc2(x)
-        x = self.relu(x)
+        x = self.sigmoid(x)
         x = self.fc3(x)
         return x
 
@@ -64,7 +65,7 @@ def choose_action(state, action_size, epsilon, model):
     if random.uniform(0, 1) < epsilon:
         return random.randint(0, action_size - 1)
     else:
-        state_tensor = torch.from_numpy(state).float().unsqueeze(0)
+        state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(model.device)
         with torch.no_grad():
             q_values = model(state_tensor)
         return torch.argmax(q_values).item()
@@ -75,14 +76,12 @@ def encode_guess(guess, alphabet='abcdefghijklmnopqrstuvwxyzæøåé'):
     One-hot encodes a given guess.
     :param guess: The guessed word (e.g., 'apple')
     :param alphabet: The alphabet used (standard is 'abcdefghijklmnopqrstuvwxyzæøåé')
-    :return: A list of one-hot encoded letters
+    :return: A list of encoded letters
     """
-    encoded_guess = []
-    for letter in guess:
-        one_hot = [0] * len(alphabet)
+    encoded_guess = np.zeros(len(guess))
+    for i, letter in enumerate(guess):
         index = alphabet.index(letter)
-        one_hot[index] = 1
-        encoded_guess.extend(one_hot)
+        encoded_guess[i] = index
     return encoded_guess
 
 
