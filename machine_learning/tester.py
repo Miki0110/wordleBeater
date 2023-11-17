@@ -1,15 +1,15 @@
 import numpy as np
 import torch
 import os
-from wordleSim import WordleEnvironment, convert_word_list
-from model import DQN, choose_action, encode_guess, read_word_list, train_model
+from wordleSim import WordleEnvironment
+from model import DQN, choose_action, encode_guess, read_word_list
 import time
 
 
 if __name__ == "__main__":
     # Set up the sim environment
-    word_list = read_word_list()
-    env = WordleEnvironment(convert_word_list(word_list))
+    word_list = read_word_list()[50:150]
+    env = WordleEnvironment(word_list)
 
     # load saved model
     saved_model = torch.load('wordle_dqn_model.pth')
@@ -31,25 +31,27 @@ if __name__ == "__main__":
     # Game loop
     try:
         while True:
-            state = env.reset()
-            no_word_vector = np.zeros(5)
-            state = np.concatenate((no_word_vector, state, [1]))
+            state = env.reset()[0].copy() / 3  # Reset the Wordle environment
+            remaining_guesses_state = 1 / 6
+            state = np.concatenate((state.flatten(), [remaining_guesses_state]))
 
             done = False
             # Print the target word
-            print(env.one_hot_to_word(env.target_word))
+            print(env.numbers_to_word(env.target_word))
 
             while not done:
                 action = choose_action(state, action_size, 0, model)
-                word_state = encode_guess(word_list[action])
-                feedback_state, reward, done = env.step(action)  # Perform the action in the environment
+                feedback, reward, done = env.step(action)  # Perform the action in the environment
+                feedback_state = feedback[0].copy() / 3
+                remaining_guesses_state = env.current_guess_index / 6
 
-                next_state = np.concatenate((word_state, feedback_state, [env.current_guess_index]))
+                next_state = np.concatenate((feedback_state.flatten(), [remaining_guesses_state]))
+
                 state = next_state
 
                 # Print the guess and feedback
                 print(f"Guess: {word_list[action]}")
-                print(f"Feedback: {feedback_state}")
+                print(f"Feedback: {feedback[1][-1]}")
 
                 # Sleep for 1 second
                 time.sleep(1)
