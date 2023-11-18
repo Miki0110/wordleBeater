@@ -48,6 +48,9 @@ class ReplayBuffer:
 
 
 class DQAgent:
+    """
+    DQN Agent that interacts with and learns from the environment.
+    """
     def __init__(self, state_size, action_size, replay_memory_size=1e5, batch_size=64, gamma=0.95, learning_rate=1e-3,
                  target_tau=2e-3, update_rate=4,  seed=None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -75,6 +78,7 @@ class DQAgent:
             if answer.lower() == 'y':
                 model_state = torch.load('wordle_dqn_model.pth')
                 self.model.load_state_dict(model_state['model_state'])
+                self.target_model.load_state_dict(model_state['model_state'])
                 print("Model loaded.")
             else:
                 print("Model not loaded.")
@@ -86,6 +90,18 @@ class DQAgent:
         self.t_step = 0
 
     def step(self, state, action, reward, next_state, done):
+        """
+        Save experience in replay memory, and use random sample from buffer to learn.
+        Params
+        ======
+            state (array_like): current state
+            action (int): action index
+            reward (float): reward
+            next_state (array_like): next state
+            done (bool): whether the episode is done or not
+            returns (float): loss
+        ======
+        """
         # Save experience in replay memory
         self.memory.append(state, action, reward, next_state, done)
         loss = None
@@ -99,6 +115,15 @@ class DQAgent:
         return loss
 
     def act(self, state, eps=0.0):
+        """
+        Returns actions for given state as per current policy.
+        Params
+        ======
+            state (array_like): current state
+            eps (float): epsilon, for epsilon-greedy action selection
+            returns (int): action index
+        ======
+        """
         state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
         self.model.eval()
         with torch.no_grad():
@@ -112,6 +137,15 @@ class DQAgent:
             return random.choice(np.arange(self.action_size))
 
     def learn(self, experiences, gamma):
+        """
+        Update value parameters using given batch of experience tuples.
+        Params
+        ======
+            experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples
+            gamma (float): discount rate
+            returns (float): loss
+        ======
+        """
         states, actions, rewards, next_states, dones = experiences
 
         # Get max predicted Q values (for next states) from target model
@@ -155,33 +189,34 @@ if __name__ == "__main__":
     # Check for past logs and increment the log number
     log_number = 0
     for file in os.listdir('runs'):
-        if file.startswith('simple_wordle_experiment'):
+        if file.startswith('wordle_experiment'):
             log_number += 1
-    writer = SummaryWriter(f'runs/simple_wordle_experiment_{log_number}')
+    writer = SummaryWriter(f'runs/wordle_experiment_{log_number}')
 
     # Initialize metrics
     total_steps = 0
-    rolling_window_size = 1000
+    rolling_window_size = 100
     rolling_rewards = deque(maxlen=rolling_window_size)
-    rolling_losses = deque(maxlen=rolling_window_size)
+    rolling_wins = deque(maxlen=rolling_window_size)
 
     # Hyperparameters
     epsilon = 1.0  # Starting exploration rate
     epsilon_min = 0.01  # Minimum exploration rate
-    epsilon_decay = 0.9999  # Decay rate
+    epsilon_decay = 0.999996  # Decay rate
     gamma = 0.95  # Discount rate
+    learning_rate = 1e-2  # Learning rate
 
     batch_size = 64  # Number of experiences to sample from the replay buffer
     save_interval = 10000  # Save the model every n episodes
 
     # Set up the sim environment
-    word_list = read_word_list()[50:100]
+    word_list = read_word_list()
     env = WordleEnvironment(word_list)
 
     """
     INPUT
     # [0-3]x30 5x encoded letters, 0 = not used, 1 = yellow, 2 = green, 3 = not in word
-    # [1-6] 1x remaining guesses
+    # [1-6] 1x current guess
     
     OUTPUT
     [0-len(Wordlist)] 1x word index
@@ -195,7 +230,7 @@ if __name__ == "__main__":
     action_size = len(word_list)  # The number of possible actions (words)
 
     # Initialize the agent
-    agent = DQAgent(state_size, action_size)
+    agent = DQAgent(state_size, action_size, gamma=gamma, batch_size=batch_size, learning_rate=learning_rate)
 
     # Main training loop
     try:
@@ -210,13 +245,16 @@ if __name__ == "__main__":
 
                     done = False
                     total_reward = 0
-                    total_loss = []
                     steps = 0
                     episode += 1
 
                     while not done:
                         action = agent.act(state, epsilon)
                         feedback, reward, done = env.step(action)  # Perform the action in the environment
+                        if np.array_equiv(feedback[1][-1], np.array([2, 2, 2, 2, 2])):  # Check if the game is won
+                            rolling_wins.append(1)
+                        elif done:
+                            rolling_wins.append(0)
                         feedback_state = feedback[0].copy() / 3
                         remaining_guesses_state = env.current_guess_index / 6
 
@@ -225,7 +263,6 @@ if __name__ == "__main__":
                         # Save the experience to the replay buffer
                         loss = agent.step(state, action, reward, next_state, done)
                         if loss is not None:
-                            total_loss.append(loss)
                             writer.add_scalar('Loss', loss, total_steps)
 
                         # Set new state
@@ -237,9 +274,7 @@ if __name__ == "__main__":
                         steps += 1
                         infobar.update(1)
 
-                    # Update metrics
-                    average_loss = np.mean(total_loss)
-                    rolling_losses.append(average_loss)
+                    # Update rolling rewards
                     rolling_rewards.append(total_reward / steps)
 
                     # Log reward to TensorBoard
@@ -255,8 +290,10 @@ if __name__ == "__main__":
 
                     # Update progress bars
                     if episode % rolling_window_size == 0:
+                        # Update wins
+                        pbar.set_description(f"Wins: {sum(rolling_wins)}/{len(rolling_wins)} = {np.mean(rolling_wins)*100:.2f}%")
                         infobar.set_description(
-                            f"Avg Reward (Last {rolling_window_size} episodes): {np.mean(rolling_rewards):.4f}, Avg Loss: {np.mean(rolling_losses):.4f}, Epsilon: {epsilon:.4f}")
+                            f"Avg Reward (Last {rolling_window_size} episodes): {np.mean(rolling_rewards):.4f}, Epsilon: {epsilon:.4f}")
                     pbar.update(1)
     except KeyboardInterrupt:
         print("Training stopped by user.")

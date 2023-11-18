@@ -1,3 +1,7 @@
 # Folders to ignore
 /.idea/
 /__pycache__/
+
+# Files to ignore
+*.pth
+events.out.*

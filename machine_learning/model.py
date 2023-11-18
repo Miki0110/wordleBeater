@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import random
-import numpy as np
 
 def read_word_list():
     with open('../wordle_list.txt', 'r', encoding='UTF-8', newline='\r\n') as f:
@@ -16,9 +14,9 @@ class DQN(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if seed is not None:
             self.seed = torch.manual_seed(seed)
-        self.fc1 = nn.Linear(state_size, 128).to(self.device)  # 128 neurons in the hidden layer
-        self.fc2 = nn.Linear(128, 64).to(self.device)
-        self.fc3 = nn.Linear(64, action_size).to(self.device)  # Output is the number of possible actions
+        self.fc1 = nn.Linear(state_size, 1024).to(self.device)  # 1024 neurons in the hidden layer
+        self.fc2 = nn.Linear(1024, 1536).to(self.device)
+        self.fc3 = nn.Linear(1536, action_size).to(self.device)  # Output is the number of possible actions
 
     def forward(self, x):
         x = F.relu(self.fc1(x))

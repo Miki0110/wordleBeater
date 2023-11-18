@@ -72,16 +72,15 @@ class WordleEnvironment:
         return feedback
 
     def get_reward(self, feedback, action):
-        # TODO: Improve the reward function
         # Initial reward based on correct positions and correct letters
         reward = sum(feedback)/10
-        if sum(feedback) != 10:
+        if not np.array_equiv(feedback, np.array([2, 2, 2, 2, 2])):
             # Penalty for incorrect letters
-            reward -= 0.1
+            reward -= 0.1 * self.current_guess_index
 
         # Reward if the word is guessed correctly
         if np.array_equiv(action, self.target_word):
-            reward += 1
+            reward += 1*(self.max_guesses - self.current_guess_index)
 
         # Penalty for guessing the same word twice
         if self.current_guess_index > 1:
@@ -123,11 +122,18 @@ if __name__ == '__main__':
     target_word = env.numbers_to_word(env.target_word)
     print(f"Target Word: {target_word}")  # For testing purposes only
 
+    total_reward = 0
+    runs = 0
     while True:
+        runs += 1
         # Start the environment
         guess_numerical = random.randint(0, len(words) - 1)
+        if runs == 3:
+            guess_numerical = words.index(target_word)
         guess_word = words[guess_numerical]
         next_state, reward, done = env.step(guess_numerical)
+
+        total_reward += reward
 
         # Extract the feedback for the latest guess from the next_state
         feedback = next_state[1][-1]
@@ -135,4 +141,5 @@ if __name__ == '__main__':
         print(f"Guess: {guess_word}, Feedback: {feedback}, Reward: {reward}, Done: {done}")
 
         if done:
+            print(f"Average Reward: {total_reward/runs}")
             break
