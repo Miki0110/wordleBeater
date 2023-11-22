@@ -2,32 +2,32 @@ import numpy as np
 import torch
 import os
 from wordleSim import WordleEnvironment
-from model import DQN, choose_action, encode_guess, read_word_list
+from model import DQN, read_word_list
+from agents import DQAgent
 import time
 
 
 if __name__ == "__main__":
     # Set up the sim environment
-    word_list = read_word_list()[50:150]
+    word_list = read_word_list()
     env = WordleEnvironment(word_list)
 
-    # load saved model
-    saved_model = torch.load('wordle_dqn_model.pth')
-    state_size = saved_model['input_size']
-
-    action_size = saved_model['output_size']
-
-    # Set up the model
-    model = DQN(state_size, action_size)
+    file_name = "wordle_dqn_model.pth"
 
     # Load the model if it exists
-    if os.path.exists('wordle_dqn_model.pth'):
-        # Ask the user if they want to load the model
-        model.load_state_dict(saved_model["model_state"])
+    if os.path.exists(file_name):
+        # Load the model
+        saved_model = torch.load(file_name)
+        # Get the state and action sizes
+        state_size = saved_model['input_size']
+        action_size = saved_model['output_size']
+
+        # Set up the model
+        agent = DQAgent(state_size, action_size, training=False, file_name=file_name)
         print("Model loaded.")
     else:
         raise Exception("No model found.")
-    model.eval()
+
     # Game loop
     try:
         while True:
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             print(env.numbers_to_word(env.target_word))
 
             while not done:
-                action = choose_action(state, action_size, 0, model)
+                action = agent.act(state, 0)
                 feedback, reward, done = env.step(action)  # Perform the action in the environment
                 feedback_state = feedback[0].copy() / 3
                 remaining_guesses_state = env.current_guess_index / 6
@@ -54,7 +54,7 @@ if __name__ == "__main__":
                 print(f"Feedback: {feedback[1][-1]}")
 
                 # Sleep for 1 second
-                time.sleep(1)
+                time.sleep(2)
 
 
     except KeyboardInterrupt:
