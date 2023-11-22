@@ -90,7 +90,7 @@ class WordleEnvironment:
 
     def is_done(self, feedback):
         # Check if the game is done (word is guessed correctly or max guesses reached)
-        return sum(feedback) == 10 or self.current_guess_index >= self.max_guesses
+        return np.array_equiv(feedback, np.array([2, 2, 2, 2, 2])) or self.current_guess_index >= self.max_guesses
 
     # Conversion functions
     def _letter_to_number(self, letter):

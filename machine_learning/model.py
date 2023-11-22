@@ -14,9 +14,9 @@ class DQN(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if seed is not None:
             self.seed = torch.manual_seed(seed)
-        self.fc1 = nn.Linear(state_size, 1024).to(self.device)  # 1024 neurons in the hidden layer
-        self.fc2 = nn.Linear(1024, 1536).to(self.device)
-        self.fc3 = nn.Linear(1536, action_size).to(self.device)  # Output is the number of possible actions
+        self.fc1 = nn.Linear(state_size, 512).to(self.device)  # 512 neurons in the hidden layer
+        self.fc2 = nn.Linear(512, 1024).to(self.device)
+        self.fc3 = nn.Linear(1024, action_size).to(self.device)  # Output is the number of possible actions
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
