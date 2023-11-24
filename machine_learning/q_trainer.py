@@ -31,10 +31,11 @@ if __name__ == "__main__":
     epsilon = 1.0  # Starting exploration rate
     epsilon_min = 0.01  # Minimum exploration rate
     epsilon_decay = 0.999999  # Decay rate for exploration prob
-    gamma = 0.9925  # Discount rate -> Value from hyperparameter optimization
-    learning_rate = 6e-05  # Learning rate -> Value from hyperparameter optimization
+    gamma = 0.8711  # Discount rate -> Value from hyperparameter optimization
+    learning_rate = 2.55e-05  # Learning rate -> Value from hyperparameter optimization
+    target_tau = 0.0208  # Soft update rate for target network -> Value from hyperparameter optimization
 
-    batch_size = 64  # Number of experiences to sample from the replay buffer -> Value from hyperparameter optimization
+    batch_size = 128  # Number of experiences to sample from the replay buffer -> Value from hyperparameter optimization
     save_interval = 10000  # Save the model every n episodes
 
     # Set up the sim environment
@@ -51,14 +52,14 @@ if __name__ == "__main__":
     """
 
     # Calculate the state vector size
-    alphabet = 'abcdefghijklmnopqrstuvwxyzæøåé'
+    alphabet = 'abcdefghijklmnopqrstuvwxyzæøå'
     remaining_length = 1
     state_size = len(alphabet)*5 + remaining_length
 
     action_size = len(word_list)  # The number of possible actions (words)
 
     # Initialize the agent
-    agent = DQAgent(state_size, action_size, gamma=gamma, batch_size=batch_size, learning_rate=learning_rate, file_name=file_name)
+    agent = DQAgent(state_size, action_size, gamma=gamma, batch_size=batch_size, learning_rate=learning_rate, target_tau=target_tau, file_name=file_name)
 
     # Main training loop
     try:

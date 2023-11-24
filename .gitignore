@@ -5,3 +5,4 @@
 # Files to ignore
 *.pth
 events.out.*
+optuna_*.txt

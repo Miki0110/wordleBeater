@@ -2,19 +2,17 @@ import numpy as np
 import torch
 import os
 from wordleSim import WordleEnvironment
-from machine_learning.model import read_word_list
 from machine_learning.agents import DQAgent
-
 
 class ModelHandler:
     def __init__(self, word_list, file_name="machine_learning/wordle_dqn_model.pth"):
-        self.alphabet = 'abcdefghijklmnopqrstuvwxyzæøåé'
+        self.alphabet = 'abcdefghijklmnopqrstuvwxyzæøå'
         self.file_name = file_name
         self.word_list = word_list
         self.filtered_word_list = self.word_list.copy()
         self.env = WordleEnvironment(self.word_list)
         self.current_state = np.zeros((5, len(self.alphabet)))  # 5x30 state vector, where 5 is the number of letters and 30 is the alphabet
-        self.current_guess_index = 0
+        self.current_guess_index = 1
         self.agent = None
         self.state_size = None
         self.action_size = None
@@ -30,8 +28,11 @@ class ModelHandler:
                 self.current_state[i][num_guess[i]] = 2
             elif feedback[i] == 'yellow':
                 self.current_state[i][num_guess[i]] = 1
-            elif feedback[i] == 'gray' and self.current_state[i][num_guess[i]] == 0:
-                self.current_state[i][num_guess[i]] = 3
+            elif feedback[i] == 'gray' and np.array_equiv(self.current_state[:, num_guess[i]], np.zeros(5)):
+                for j in range(len(guess)):
+                    self.current_state[j][num_guess[i]] = 3
+        # DEBUG
+        print(self.current_state)
         self.current_guess_index += 1
 
     def update_word_list(self, guess, feedback):
@@ -92,6 +93,8 @@ class ModelHandler:
         state = np.concatenate((self.current_state.flatten().copy() / 3, [self.current_guess_index / 6]))
         # Get the action values for the state
         action = self.agent.action_values(state)[0]
+
+        print("best word:", self.word_list[np.argmax(action)])
 
         # Filter the action values to only include the filtered words
         filtered_action = np.zeros(len(action))

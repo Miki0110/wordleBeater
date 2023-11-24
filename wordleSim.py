@@ -3,7 +3,7 @@ import numpy as np
 
 
 class WordleEnvironment:
-    def __init__(self, word_list, alphabet='abcdefghijklmnopqrstuvwxyzæøåé'):
+    def __init__(self, word_list, alphabet='abcdefghijklmnopqrstuvwxyzæøå'):
         assert all(len(word) == 5 for word in word_list), "All words must be 5 letters long"
         self.alphabet = alphabet
         self.words = self.convert_list_to_numbers(word_list)
